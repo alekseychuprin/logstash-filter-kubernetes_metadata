@@ -124,6 +124,7 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
   # This is completely up to the user to supply and use in their logstash config and will not
   # be used anywhere else
   config :default_log_format, :validate => :string, :default => "default"
+  config :secret_token_file, :validate => :string, :default => '/var/run/secrets/kubernetes.io/serviceaccount/token'
 
   public
   def register
@@ -296,14 +297,15 @@ class LogStash::Filters::KubernetesMetadata < LogStash::Filters::Base
 
         basic_user = @auth_basic_user
         basic_pass = @auth_basic_pass
-
         rest_opts.merge!( user: basic_user, password: basic_pass )
       elsif @auth_bearer_key
         @logger.debug("Found Bearer auth for Kubernetes API")
-
-        bearer_key = @auth_bearer_key
-
-        rest_opts.merge!( Authorization: "Bearer #{bearer_key}" )
+        if @auth_bearer_key == "ServiceAccount"
+          bearer_key = File.read(secret_token_file)
+        else
+          bearer_key = @auth_bearer_key
+        end
+        rest_opts.merge!(headers: {Authorization: "Bearer #{bearer_key}"})
       end
 
       @logger.debug("rest_opts: #{rest_opts}")
